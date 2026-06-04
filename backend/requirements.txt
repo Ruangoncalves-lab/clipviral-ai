@@ -1,0 +1,9 @@
+faster-whisper
+google-generativeai
+pydantic
+python-dotenv
+fastapi
+uvicorn
+python-multipart
+requests
+boto3
