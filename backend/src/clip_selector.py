@@ -92,16 +92,38 @@ def select_best_clips(segments, num_clips, min_duration=DEFAULT_MIN_CLIP_DURATIO
     if not candidates:
         return []
         
+    # 2. Evaluate all candidates locally first for pre-filtering
+    print("Evaluating candidate clips locally for pre-filtering...")
+    local_evaluated = analyze_candidates_locally(candidates)
+    
     evaluated_candidates = None
     
-    # 2. Try Gemini analysis if requested
+    # 3. Try Gemini analysis on top 40 candidates if requested
     if use_gemini and gemini_api_key:
-        evaluated_candidates = analyze_candidates_with_gemini(candidates, gemini_api_key)
+        # Sort locally evaluated candidates to select top 40
+        local_evaluated.sort(key=lambda x: x["score"], reverse=True)
+        top_candidates = local_evaluated[:40]
         
-    # 3. Fallback to rule analyzer if Gemini failed or wasn't requested
-    if evaluated_candidates is None:
-        print("Using local rule-based analyzer.")
-        evaluated_candidates = analyze_candidates_locally(candidates)
+        print(f"Sending top {len(top_candidates)} candidates to Gemini 1.5 Pro...")
+        # Pass the top candidates (which contain text, start, end, duration) to Gemini
+        gemini_results = analyze_candidates_with_gemini(top_candidates, gemini_api_key)
+        
+        if gemini_results is not None:
+            # Merge Gemini results back: map of candidate id -> gemini result
+            gemini_map = {item["id"]: item for item in gemini_results}
+            merged_list = []
+            for item in local_evaluated:
+                c_id = item["id"]
+                if c_id in gemini_map:
+                    merged_list.append(gemini_map[c_id])
+                else:
+                    merged_list.append(item)
+            evaluated_candidates = merged_list
+        else:
+            print("Gemini analysis failed or returned empty results. Falling back fully to local rule-based scores.")
+            evaluated_candidates = local_evaluated
+    else:
+        evaluated_candidates = local_evaluated
         
     # 4. Sort by score in descending order
     evaluated_candidates.sort(key=lambda x: x["score"], reverse=True)
