@@ -12,21 +12,26 @@ class R2Client:
         self.access_key_id = os.environ.get("R2_ACCESS_KEY_ID", "")
         self.secret_access_key = os.environ.get("R2_SECRET_ACCESS_KEY", "")
         self.bucket_name = os.environ.get("R2_BUCKET_NAME", "clipviral-videos")
-        
-        # S3-compatible R2 endpoint
-        self.endpoint_url = f"https://{self.account_id}.r2.cloudflarestorage.com"
-        
-        if not self.account_id or not self.access_key_id or not self.secret_access_key:
-            logger.warning("Cloudflare R2 credentials are not fully set in environment variables.")
-            
-        self.s3_client = boto3.client(
-            service_name="s3",
-            endpoint_url=self.endpoint_url,
-            aws_access_key_id=self.access_key_id,
-            aws_secret_access_key=self.secret_access_key,
-            region_name="auto",
-            config=Config(signature_version="s3v4")
-        )
+        self._s3_client = None
+
+    @property
+    def s3_client(self):
+        if self._s3_client is None:
+            if not self.account_id or not self.access_key_id or not self.secret_access_key:
+                raise ValueError(
+                    "Cloudflare R2 credentials (R2_ACCOUNT_ID, R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY) "
+                    "must be configured in environment variables to use storage operations."
+                )
+            endpoint_url = f"https://{self.account_id}.r2.cloudflarestorage.com"
+            self._s3_client = boto3.client(
+                service_name="s3",
+                endpoint_url=endpoint_url,
+                aws_access_key_id=self.access_key_id,
+                aws_secret_access_key=self.secret_access_key,
+                region_name="auto",
+                config=Config(signature_version="s3v4")
+            )
+        return self._s3_client
 
     def generate_presigned_put_url(self, key: str, content_type: str, expires_in: int = 3600) -> str:
         """
