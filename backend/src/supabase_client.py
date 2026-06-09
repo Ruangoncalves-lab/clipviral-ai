@@ -1,3 +1,4 @@
+import os
 import requests
 import logging
 
@@ -7,7 +8,14 @@ class SupabaseClient:
     def __init__(self, supabase_url: str, supabase_key: str):
         # Normalize trailing slash in URL
         self.supabase_url = supabase_url.rstrip('/')
-        self.supabase_key = supabase_key
+        
+        # Upgrade to service role key if URL matches and env key is available
+        env_url = os.environ.get("SUPABASE_URL", "").rstrip('/')
+        env_key = os.environ.get("SUPABASE_KEY", "")
+        if env_url and env_key and self.supabase_url == env_url:
+            self.supabase_key = env_key
+        else:
+            self.supabase_key = supabase_key
         
         # Setup common headers
         self.headers = {
