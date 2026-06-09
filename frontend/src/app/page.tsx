@@ -86,6 +86,7 @@ export default function Dashboard() {
   const [editedVideoUrl, setEditedVideoUrl] = useState<string | null>(null);
   const [rightPanelTab, setRightPanelTab] = useState<'copilot' | 'transcript' | 'brolls'>('copilot');
   const videoPlayerRef = useRef<HTMLVideoElement>(null);
+  const r2PublicUrl = (process.env.NEXT_PUBLIC_R2_PUBLIC_URL || 'https://pub-cf69eb74b3d74c0c80ee91f24d3101aa.r2.dev').replace(/\/$/, '');
 
   const fetchSocialAccounts = async (userId: string) => {
     try {
@@ -707,7 +708,7 @@ export default function Dashboard() {
                                         Visualizar
                                       </button>
                                       <a
-                                        href={clip.storage_path ? `https://pub-cf69eb74b3d74c0c80ee91f24d3101aa.r2.dev/${clip.storage_path}` : '#'}
+                                        href={clip.storage_path ? `${r2PublicUrl}/${clip.storage_path}` : '#'}
                                         target="_blank"
                                         rel="noreferrer"
                                         className="inline-flex items-center justify-center px-3 py-2 text-xs font-semibold rounded-lg bg-zinc-800 hover:bg-zinc-700 border border-zinc-700 text-zinc-300 hover:text-white transition-all"
@@ -1185,7 +1186,7 @@ export default function Dashboard() {
                   <video 
                     ref={videoPlayerRef}
                     key={editedVideoUrl || playingClip.storage_path}
-                    src={editedVideoUrl || `https://pub-cf69eb74b3d74c0c80ee91f24d3101aa.r2.dev/${playingClip.storage_path}`} 
+                    src={editedVideoUrl || `${r2PublicUrl}/${playingClip.storage_path}`} 
                     controls 
                     autoPlay 
                     className="w-full h-full object-contain"
