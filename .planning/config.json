@@ -1,0 +1,19 @@
+{
+  "mode": "yolo",
+  "granularity": "standard",
+  "workflow": {
+    "research": true,
+    "plan_check": false,
+    "verifier": false,
+    "auto_advance": true,
+    "nyquist_validation": false,
+    "security_enforcement": false
+  },
+  "planning": {
+    "commit_docs": true,
+    "search_gitignored": false
+  },
+  "parallelization": {
+    "enabled": false
+  }
+}

@@ -7,3 +7,6 @@ uvicorn
 python-multipart
 requests
 boto3
+yt-dlp
+opencv-python-headless
+stripe

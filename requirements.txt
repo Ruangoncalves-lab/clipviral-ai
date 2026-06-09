@@ -1,0 +1,8 @@
+gradio>=4.0.0
+faster-whisper
+google-generativeai
+pydantic
+python-dotenv
+opencv-python
+yt-dlp
+stripe

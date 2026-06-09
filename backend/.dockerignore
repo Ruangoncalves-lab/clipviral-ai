@@ -1,0 +1,29 @@
+# Ignore Python caches and local environment configurations
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.env
+.venv
+venv/
+env/
+
+# Ignore temporary and output directories
+temp/
+output/
+*.mp4
+*.mp3
+*.wav
+*.ass
+*.srt
+
+# Ignore large downloaded binaries (ffmpeg is installed via apt-get inside Docker)
+ffmpeg.zip
+ffmpeg/
+ffprobe/
+
+# Ignore git repository settings and developer metadata
+.git/
+.gitignore
+.dockerignore
+Dockerfile

@@ -71,3 +71,185 @@ class SupabaseClient:
         if response.status_code not in [200, 201]:
             raise RuntimeError(f"Failed to insert clip record in database: {response.text}")
         return response.json()
+
+    def get_user_profile(self, user_id: str):
+        """Fetches profile details (like subtitles customization) for a user ID."""
+        url = f"{self.supabase_url}/rest/v1/profiles"
+        headers = {
+            **self.headers,
+            "Accept": "application/json"
+        }
+        params = {
+            "id": f"eq.{user_id}",
+            "select": "subtitle_font_size,subtitle_font_color,subtitle_font_style"
+        }
+        logger.info(f"GET DB Table 'profiles' for ID {user_id}")
+        response = requests.get(url, headers=headers, params=params)
+        if response.status_code != 200:
+            logger.error(f"Failed to fetch profile: {response.text}")
+            return None
+        data = response.json()
+        if isinstance(data, list) and len(data) > 0:
+            return data[0]
+        return None
+
+    def insert_video_record(self, record: dict):
+        """Inserts a new video record into public.videos table."""
+        url = f"{self.supabase_url}/rest/v1/videos"
+        headers = {
+            **self.headers,
+            "Content-Type": "application/json",
+            "Prefer": "return=representation"
+        }
+        logger.info(f"POST DB Table 'videos': {record}")
+        response = requests.post(url, headers=headers, json=record)
+        if response.status_code not in [200, 201]:
+            raise RuntimeError(f"Failed to insert video record: {response.text}")
+        return response.json()
+
+    def insert_social_account(self, account: dict):
+        """Inserts or updates a connected social account."""
+        url = f"{self.supabase_url}/rest/v1/social_accounts"
+        # Clear existing first to bypass unique constraint conflicts cleanly
+        try:
+            self.delete_social_account(account["user_id"], account["provider"])
+        except Exception:
+            pass
+            
+        headers = {
+            **self.headers,
+            "Content-Type": "application/json",
+            "Prefer": "return=representation"
+        }
+        logger.info(f"POST DB Table 'social_accounts': {account}")
+        response = requests.post(url, headers=headers, json=account)
+        if response.status_code not in [200, 201]:
+            raise RuntimeError(f"Failed to insert social account: {response.text}")
+        return response.json()
+
+    def delete_social_account(self, user_id: str, provider: str):
+        """Deletes a connected social account."""
+        url = f"{self.supabase_url}/rest/v1/social_accounts"
+        headers = self.headers
+        params = {
+            "user_id": f"eq.{user_id}",
+            "provider": f"eq.{provider}"
+        }
+        logger.info(f"DELETE DB Table 'social_accounts' for user {user_id}, provider {provider}")
+        response = requests.delete(url, headers=headers, params=params)
+        return response
+
+    def insert_scheduled_post(self, post: dict):
+        """Inserts a scheduled post record via RPC function."""
+        url = f"{self.supabase_url}/rest/v1/rpc/rpc_insert_scheduled_post"
+        headers = {
+            **self.headers,
+            "Content-Type": "application/json"
+        }
+        payload = {
+            "p_user_id": post["user_id"],
+            "p_clip_id": post["clip_id"],
+            "p_provider": post["provider"],
+            "p_title": post["title"],
+            "p_description": post.get("description", ""),
+            "p_scheduled_time": post["scheduled_time"]
+        }
+        logger.info(f"POST RPC 'rpc_insert_scheduled_post': {payload}")
+        response = requests.post(url, headers=headers, json=payload)
+        if response.status_code not in [200, 201]:
+            raise RuntimeError(f"Failed to insert scheduled post via RPC: {response.text}")
+        return response.json()
+
+    def get_pending_scheduled_posts(self):
+        """Retrieves posts that are scheduled and ready to be published via RPC function."""
+        url = f"{self.supabase_url}/rest/v1/rpc/get_pending_scheduled_posts"
+        headers = {
+            **self.headers,
+            "Accept": "application/json",
+            "Content-Type": "application/json"
+        }
+        logger.info("POST RPC 'get_pending_scheduled_posts'")
+        response = requests.post(url, headers=headers, json={})
+        if response.status_code != 200:
+            logger.error(f"Failed to fetch pending scheduled posts via RPC: {response.text}")
+            return []
+        return response.json()
+
+    def update_scheduled_post_status(self, post_id: str, status_val: str, error_msg: str = None):
+        """Updates the status and error message of a scheduled post via RPC function."""
+        url = f"{self.supabase_url}/rest/v1/rpc/update_scheduled_post_status"
+        headers = {
+            **self.headers,
+            "Content-Type": "application/json"
+        }
+        payload = {
+            "post_id": post_id,
+            "status_val": status_val,
+            "error_msg": error_msg
+        }
+        logger.info(f"POST RPC 'update_scheduled_post_status' ID {post_id} to status {status_val}")
+        response = requests.post(url, headers=headers, json=payload)
+        if response.status_code not in [200, 204]:
+            logger.error(f"Failed to update scheduled post status via RPC: {response.text}")
+
+    def add_credits(self, user_id: str, amount: int):
+        """Adds credits to a user profile using rpc_add_credits RPC function."""
+        url = f"{self.supabase_url}/rest/v1/rpc/rpc_add_credits"
+        headers = {
+            **self.headers,
+            "Content-Type": "application/json"
+        }
+        payload = {
+            "p_user_id": user_id,
+            "p_amount": amount
+        }
+        logger.info(f"POST RPC 'rpc_add_credits' for user {user_id}: {amount} credits")
+        response = requests.post(url, headers=headers, json=payload)
+        if response.status_code not in [200, 201, 204]:
+            raise RuntimeError(f"Failed to add credits in database: {response.text}")
+        return response.json() if response.status_code != 204 else None
+
+    def get_social_account(self, user_id: str, provider: str):
+        """Fetches the connected social account for a user and provider."""
+        url = f"{self.supabase_url}/rest/v1/social_accounts"
+        headers = {
+            **self.headers,
+            "Accept": "application/json"
+        }
+        params = {
+            "user_id": f"eq.{user_id}",
+            "provider": f"eq.{provider}",
+            "select": "*"
+        }
+        logger.info(f"GET DB Table 'social_accounts' for user {user_id}, provider {provider}")
+        response = requests.get(url, headers=headers, params=params)
+        if response.status_code != 200:
+            logger.error(f"Failed to fetch social account: {response.text}")
+            return None
+        data = response.json()
+        if isinstance(data, list) and len(data) > 0:
+            return data[0]
+        return None
+
+    def get_clip(self, clip_id: str):
+        """Fetches a clip record from public.clips table."""
+        url = f"{self.supabase_url}/rest/v1/clips"
+        headers = {
+            **self.headers,
+            "Accept": "application/json"
+        }
+        params = {
+            "id": f"eq.{clip_id}",
+            "select": "*"
+        }
+        logger.info(f"GET DB Table 'clips' for ID {clip_id}")
+        response = requests.get(url, headers=headers, params=params)
+        if response.status_code != 200:
+            logger.error(f"Failed to fetch clip: {response.text}")
+            return None
+        data = response.json()
+        if isinstance(data, list) and len(data) > 0:
+            return data[0]
+        return None
+
+

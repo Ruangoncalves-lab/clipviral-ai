@@ -10,3 +10,4 @@ __pycache__/
 *.webm
 *.wav
 *.mp3
+node_modules
