@@ -11,3 +11,5 @@ __pycache__/
 *.wav
 *.mp3
 node_modules
+
+.vercel
