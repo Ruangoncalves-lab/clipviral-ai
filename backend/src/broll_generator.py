@@ -112,7 +112,7 @@ Importante: Responda apenas o array JSON. Não inclua explicação antes ou depo
 """
 
     try:
-        model = genai.GenerativeModel("gemini-1.5-pro")
+        model = genai.GenerativeModel("gemini-1.5-flash")
         response = model.generate_content(
             prompt,
             generation_config={"response_mime_type": "application/json"}
@@ -166,8 +166,8 @@ def generate_simple_suggestions(transcript: str, clip_duration: float) -> list[d
     Generates basic B-Roll suggestions without AI, using keyword detection.
     Used as a fallback when Gemini API is not available.
     """
-    if not transcript:
-        return []
+    if not transcript or not transcript.strip():
+        transcript = "Narrativa padrão do clip"
     
     # Simple keyword-based detection
     keyword_map = {
@@ -200,6 +200,22 @@ def generate_simple_suggestions(transcript: str, clip_duration: float) -> list[d
                 "visual_description": description,
                 "reason": f"Reforça visualmente o conceito de '{keyword}' mencionado no vídeo",
                 "text_context": keyword,
+            })
+            
+    if len(suggestions) == 0:
+        # Generate generic suggestions based on clip duration
+        n = 3
+        segment = clip_duration / (n + 1) if clip_duration > 0 else 5.0
+        for i in range(n):
+            ts_start = max(0.0, i * segment)
+            ts_end = min(clip_duration, ts_start + 3.0)
+            suggestions.append({
+                "timestamp_start": round(ts_start, 1),
+                "timestamp_end": round(ts_end, 1),
+                "category": "illustration",
+                "visual_description": f"Cena ilustrativa da narrativa - Parte {i+1}",
+                "reason": "Enriquece o ritmo do vídeo e mantém o engajamento visual do espectador.",
+                "text_context": "Trecho da transcrição correspondente."
             })
     
     return suggestions

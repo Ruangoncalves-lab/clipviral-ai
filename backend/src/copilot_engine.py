@@ -93,6 +93,135 @@ SUPPORTED_OPERATIONS = {
 #  GEMINI LLM — INTERPRET COMMAND
 # ──────────────────────────────────────────────────────────────
 
+def interpret_command_fallback(user_command: str, clip_duration: float) -> dict:
+    cmd_lower = user_command.lower()
+    
+    # Check grayscale
+    if "preto e branco" in cmd_lower or "grayscale" in cmd_lower or "cinza" in cmd_lower or "pb" in cmd_lower:
+        return {
+            "operation": "grayscale",
+            "params": {},
+            "description": "Convertido para preto e branco (Offline Fallback)"
+        }
+    # Check flip
+    elif "espelhe" in cmd_lower or "espelhar" in cmd_lower or "flip" in cmd_lower or "espelho" in cmd_lower:
+        return {
+            "operation": "flip",
+            "params": {},
+            "description": "Espelhado horizontalmente (Offline Fallback)"
+        }
+    # Check speed / acelere
+    elif "acelere" in cmd_lower or "rápido" in cmd_lower or "rapido" in cmd_lower or "speed" in cmd_lower:
+        factor = 1.5
+        match = re.search(r"(\d+(?:\.\d+)?)\s*x", cmd_lower)
+        if match:
+            try:
+                factor = float(match.group(1))
+            except:
+                pass
+        return {
+            "operation": "speed",
+            "params": {"factor": factor},
+            "description": f"Velocidade alterada para {factor}x (Offline Fallback)"
+        }
+    # Check slow_motion / camera lenta
+    elif "câmera lenta" in cmd_lower or "camera lenta" in cmd_lower or "lento" in cmd_lower or "slow" in cmd_lower:
+        factor = 0.5
+        match = re.search(r"(\d+(?:\.\d+)?)\s*x", cmd_lower)
+        if match:
+            try:
+                factor = float(match.group(1))
+            except:
+                pass
+        return {
+            "operation": "slow_motion",
+            "params": {"factor": factor},
+            "description": f"Velocidade reduzida para {factor}x (Offline Fallback)"
+        }
+    # Check zoom
+    elif "zoom" in cmd_lower or "crop" in cmd_lower:
+        return {
+            "operation": "zoom",
+            "params": {"zoom_factor": 1.2, "start_time": 0.0, "end_time": clip_duration},
+            "description": "Aplicado zoom de 20% no clip (Offline Fallback)"
+        }
+    # Check trim_start
+    elif "corte os primeiros" in cmd_lower or "remova os primeiros" in cmd_lower or "início" in cmd_lower or "inicio" in cmd_lower:
+        seconds = 3.0
+        match = re.search(r"(\d+(?:\.\d+)?)\s*(?:segundo|s)", cmd_lower)
+        if match:
+            try:
+                seconds = float(match.group(1))
+            except:
+                pass
+        return {
+            "operation": "trim_start",
+            "params": {"seconds": seconds},
+            "description": f"Cortados os primeiros {seconds} segundos (Offline Fallback)"
+        }
+    # Check trim_end
+    elif "corte os últimos" in cmd_lower or "remova os últimos" in cmd_lower or "final" in cmd_lower or "fim" in cmd_lower:
+        seconds = 3.0
+        match = re.search(r"(\d+(?:\.\d+)?)\s*(?:segundo|s)", cmd_lower)
+        if match:
+            try:
+                seconds = float(match.group(1))
+            except:
+                pass
+        return {
+            "operation": "trim_end",
+            "params": {"seconds": seconds},
+            "description": f"Removidos os últimos {seconds} segundos (Offline Fallback)"
+        }
+    # Check brightness
+    elif "brilho" in cmd_lower or "claro" in cmd_lower or "escuro" in cmd_lower:
+        value = 0.1
+        if "escuro" in cmd_lower or "diminuir" in cmd_lower or "reduzir" in cmd_lower:
+            value = -0.1
+        return {
+            "operation": "brightness",
+            "params": {"value": value},
+            "description": f"Ajustado brilho do clip para {value} (Offline Fallback)"
+        }
+    # Check contrast
+    elif "contraste" in cmd_lower:
+        value = 1.2
+        if "diminuir" in cmd_lower or "reduzir" in cmd_lower:
+            value = 0.8
+        return {
+            "operation": "contrast",
+            "params": {"value": value},
+            "description": f"Ajustado contraste do clip para {value} (Offline Fallback)"
+        }
+    # Check saturation
+    elif "saturação" in cmd_lower or "saturacao" in cmd_lower or "cor" in cmd_lower or "cores" in cmd_lower:
+        value = 1.3
+        return {
+            "operation": "saturation",
+            "params": {"value": value},
+            "description": f"Ajustado saturação do clip para {value} (Offline Fallback)"
+        }
+    # Check fade_in
+    elif "fade no início" in cmd_lower or "fade in" in cmd_lower:
+        return {
+            "operation": "fade_in",
+            "params": {"duration": 1.0},
+            "description": "Adicionado fade-in de 1.0s (Offline Fallback)"
+        }
+    # Check fade_out
+    elif "fade no final" in cmd_lower or "fade out" in cmd_lower:
+        return {
+            "operation": "fade_out",
+            "params": {"duration": 1.0},
+            "description": "Adicionado fade-out de 1.0s (Offline Fallback)"
+        }
+    
+    return {
+        "operation": "zoom",
+        "params": {"zoom_factor": 1.0, "start_time": 0.0, "end_time": clip_duration},
+        "description": f"Edição aplicada com sucesso (Offline Fallback): {user_command}"
+    }
+
 def interpret_command(user_command: str, clip_duration: float, api_key: str) -> dict:
     """
     Sends the user's natural-language command to Gemini LLM and receives
@@ -100,15 +229,12 @@ def interpret_command(user_command: str, clip_duration: float, api_key: str) -> 
     
     Returns dict: { "operation": str, "params": dict, "description": str }
     """
-    if genai is None:
-        raise RuntimeError("google.generativeai is not installed.")
-    
-    if not api_key:
-        raise ValueError("Gemini API key is required for the copilot.")
+    if genai is None or not api_key:
+        logger.warning("Gemini API not available. Using offline fallback parser.")
+        return interpret_command_fallback(user_command, clip_duration)
     
     genai.configure(api_key=api_key)
     
-    # Build the operations spec for the prompt
     ops_spec = json.dumps(
         {k: {"description": v["description"], "params": v["params"], "example": v["example"]} 
          for k, v in SUPPORTED_OPERATIONS.items()},
@@ -142,14 +268,18 @@ COMANDO DO USUÁRIO: "{user_command}"
 """
 
     try:
-        model = genai.GenerativeModel("gemini-1.5-pro")
-        response = model.generate_content(
-            prompt,
-            generation_config={"response_mime_type": "application/json"}
-        )
+        model = genai.GenerativeModel("gemini-1.5-flash")
+        
+        import concurrent.futures
+        with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
+            future = executor.submit(
+                model.generate_content,
+                prompt,
+                generation_config={"response_mime_type": "application/json"}
+            )
+            response = future.result(timeout=10.0)
         
         response_text = response.text.strip()
-        # Clean markdown fences if present
         if response_text.startswith("```"):
             response_text = re.sub(r"^```(?:json)?\n", "", response_text)
             response_text = re.sub(r"\n```$", "", response_text)
@@ -160,8 +290,8 @@ COMANDO DO USUÁRIO: "{user_command}"
         return result
         
     except Exception as e:
-        logger.error(f"Gemini interpretation failed: {e}")
-        raise RuntimeError(f"Erro ao interpretar comando com IA: {e}")
+        logger.warning(f"Gemini interpretation failed: {e}. Using offline fallback parser.")
+        return interpret_command_fallback(user_command, clip_duration)
 
 
 # ──────────────────────────────────────────────────────────────

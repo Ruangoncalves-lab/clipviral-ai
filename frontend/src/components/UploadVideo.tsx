@@ -194,7 +194,10 @@ export default function UploadVideo({ onUploadSuccess }: UploadVideoProps) {
       const res = await fetch(`${backendUrl}/api/youtube/info`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ url: url.trim() }),
+        body: JSON.stringify({
+          url: url.trim(),
+          supabase_key: process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '',
+        }),
       });
       if (!res.ok) {
         const err = await res.json().catch(() => ({ detail: 'URL inválida' }));

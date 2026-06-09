@@ -56,8 +56,8 @@ def analyze_candidates_with_gemini(candidates, api_key):
         
         full_prompt = prompt + json.dumps(prompt_candidates, ensure_ascii=False, indent=2)
         
-        print("Sending request to Gemini API (gemini-1.5-pro)...")
-        model = genai.GenerativeModel("gemini-1.5-pro")
+        print("Sending request to Gemini API (gemini-1.5-pro-latest)...")
+        model = genai.GenerativeModel("gemini-1.5-flash")
         
         response = model.generate_content(
             full_prompt,

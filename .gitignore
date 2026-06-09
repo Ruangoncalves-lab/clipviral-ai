@@ -13,3 +13,5 @@ __pycache__/
 node_modules
 
 .vercel
+
+testsprite_tests\tmp\config.json
