@@ -88,6 +88,17 @@ def get_video_info(url: str) -> dict:
         'socket_timeout': 15,
     }
     
+    # Check for cookies.txt in backend directory to bypass bot blockages
+    cookies_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'cookies.txt')
+    if os.path.exists(cookies_path):
+        ydl_opts['cookiefile'] = cookies_path
+        
+    ydl_opts['extractor_args'] = {
+        'youtube': {
+            'player_client': ['android', 'ios']
+        }
+    }
+    
     try:
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             info = ydl.extract_info(url, download=False)
@@ -171,30 +182,29 @@ def download_video(url: str, output_path: str, max_duration: int = 3600) -> dict
         'retries': 3,
     }
     
+    # Check for cookies.txt in backend directory to bypass bot blockages
+    cookies_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'cookies.txt')
+    if os.path.exists(cookies_path):
+        ydl_opts['cookiefile'] = cookies_path
+
+    ydl_opts['extractor_args'] = {
+        'youtube': {
+            'player_client': ['android', 'ios']
+        }
+    }
+    
     try:
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-            ydl.download([url])
+            res_code = ydl.download([url])
+            if res_code != 0:
+                raise RuntimeError(f"yt-dlp returned exit code {res_code}")
     except Exception as e:
-        logger.warning(f"YouTube download failed using yt-dlp: {e}. Creating a mock video file as fallback.")
-        output_template = output_path
-        if output_template.endswith('.mp4'):
-            output_template = output_template[:-4]
-        final_path = output_template + '.mp4'
-        os.makedirs(os.path.dirname(final_path), exist_ok=True)
-        import subprocess
-        cmd = [
-            "ffmpeg", "-y",
-            "-f", "lavfi", "-i", "testsrc=duration=5:size=1080x1920:rate=30",
-            "-f", "lavfi", "-i", "sine=frequency=1000:duration=5",
-            "-c:v", "libx264", "-c:a", "aac", "-pix_fmt", "yuv420p",
-            final_path
-        ]
-        try:
-            subprocess.run(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=True)
-        except Exception as ff_err:
-            logger.error(f"FFmpeg fallback generation failed: {ff_err}")
-            with open(final_path, "wb") as f:
-                f.write(b"mock video data")
+        logger.error(f"YouTube download failed: {e}")
+        raise RuntimeError(
+            "O download do YouTube falhou. Isso geralmente ocorre porque o YouTube está bloqueando o servidor "
+            "(HTTP 403 / Bot block). Para resolver, você pode enviar o arquivo de vídeo (.mp4) diretamente "
+            "ou configurar o arquivo cookies.txt no servidor."
+        )
     
     # Find the actual downloaded file
     final_path = output_template + '.mp4'
