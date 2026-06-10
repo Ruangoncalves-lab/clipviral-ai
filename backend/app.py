@@ -87,7 +87,7 @@ def run_processing_job(req: ProcessRequest):
     
     # Update video status to 'processing'
     try:
-        supabase.update_video_status(req.video_id, {"status": "processing"})
+        supabase.update_video_status(req.video_id, {"status": "processing", "progress": 25})
     except Exception as e:
         logger.error(f"Failed to update video status to processing: {e}")
         return
@@ -111,6 +111,10 @@ def run_processing_job(req: ProcessRequest):
             
         # 2. Transcription
         logger.info("Transcribing audio...")
+        try:
+            supabase.update_video_status(req.video_id, {"progress": 30})
+        except Exception:
+            pass
         segments = transcribe_video(
             video_path=local_input_path,
             model_size=req.model_size,
@@ -123,6 +127,10 @@ def run_processing_job(req: ProcessRequest):
             
         # 3. Clip Selection
         logger.info("Selecting best clips...")
+        try:
+            supabase.update_video_status(req.video_id, {"progress": 55})
+        except Exception:
+            pass
         selected_clips = select_best_clips(
             segments=segments,
             num_clips=req.num_clips,
@@ -224,17 +232,24 @@ def run_processing_job(req: ProcessRequest):
                 "duration": clip["duration"],
                 "storage_path": storage_clip_path
             })
+            
+            try:
+                progress_val = 60 + int(((idx + 1) / len(selected_clips)) * 35)
+                supabase.update_video_status(req.video_id, {"progress": progress_val})
+            except Exception:
+                pass
 
         # Update video status to 'completed'
         logger.info(f"Job {job_id} completed successfully")
-        supabase.update_video_status(req.video_id, {"status": "completed", "duration": total_duration})
+        supabase.update_video_status(req.video_id, {"status": "completed", "duration": total_duration, "progress": 100})
 
     except Exception as e:
         logger.error(f"Job {job_id} failed: {e}")
         try:
             supabase.update_video_status(req.video_id, {
                 "status": "failed",
-                "error_message": str(e)
+                "error_message": str(e),
+                "progress": 0
             })
         except Exception as db_err:
             logger.error(f"Failed to update video status to failed: {db_err}")
@@ -844,31 +859,55 @@ def run_youtube_import_job(req: YouTubeImportRequest):
     except Exception as e:
         logger.error(f"YouTube import: Failed to create Supabase client: {e}")
         return
+        
+    # Insert video record immediately in 'processing' status with 5% progress
+    try:
+        supabase.insert_video_record({
+            'id': video_id,
+            'user_id': req.user_id,
+            'name': req.youtube_url,
+            'storage_path': '',
+            'duration': 0,
+            'status': 'processing',
+            'progress': 5,
+        })
+    except Exception as e:
+        logger.error(f"YouTube import: Failed to insert initial video record: {e}")
+        return
     
     try:
         ensure_dirs()
         
         # 1. Download from YouTube
         logger.info(f"YouTube import: Downloading {req.youtube_url}")
+        try:
+            supabase.update_video_status(video_id, {"progress": 10})
+        except Exception:
+            pass
         yt_result = download_video(req.youtube_url, local_path, max_duration=3600)
         video_title = yt_result['title']
         
         # 2. Upload to R2
         storage_path = f"uploads/{req.user_id}/{video_id}/{safe_filename(video_title)}.mp4"
         logger.info(f"YouTube import: Uploading to R2 as {storage_path}")
+        try:
+            supabase.update_video_status(video_id, {"progress": 15})
+        except Exception:
+            pass
         with open(yt_result['filepath'], "rb") as f:
             video_data = f.read()
         r2_client.upload_file_data(storage_path, video_data, content_type="video/mp4")
         
-        # 3. Create video record
-        supabase.insert_video_record({
-            'id': video_id,
-            'user_id': req.user_id,
-            'name': video_title,
-            'storage_path': storage_path,
-            'duration': yt_result['duration'],
-            'status': 'processing',
-        })
+        # 3. Update video record with R2 path and meta
+        try:
+            supabase.update_video_status(video_id, {
+                'name': video_title,
+                'storage_path': storage_path,
+                'duration': yt_result['duration'],
+                'progress': 20
+            })
+        except Exception:
+            pass
         
         # 4. Run the normal processing pipeline
         process_req = ProcessRequest(
@@ -892,14 +931,10 @@ def run_youtube_import_job(req: YouTubeImportRequest):
     except Exception as e:
         logger.error(f"YouTube import failed: {e}")
         try:
-            supabase.insert_video_record({
-                'id': video_id,
-                'user_id': req.user_id,
-                'name': req.youtube_url,
-                'storage_path': '',
-                'duration': 0,
+            supabase.update_video_status(video_id, {
                 'status': 'failed',
                 'error_message': str(e),
+                'progress': 0
             })
         except Exception:
             pass

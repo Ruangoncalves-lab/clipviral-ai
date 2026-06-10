@@ -22,6 +22,7 @@ interface Video {
   duration: number;
   error_message: string | null;
   created_at: string;
+  progress?: number;
 }
 
 interface Clip {
@@ -826,6 +827,73 @@ export default function Dashboard() {
                               )}
                             </div>
                           </div>
+
+                          {/* Video progress if processing */}
+                          {video.status === 'processing' && (
+                            <div className="p-5 border-t border-zinc-800/60 bg-zinc-900/5 space-y-4">
+                              <div className="w-full">
+                                <div className="flex justify-between text-xs font-semibold text-zinc-400 mb-1.5">
+                                  <span className="flex items-center gap-1.5">
+                                    <span className="w-1.5 h-1.5 rounded-full bg-violet-400 animate-ping"></span>
+                                    {video.progress ? (
+                                      video.progress < 10 ? 'Inicializando...' :
+                                      video.progress < 25 ? 'Baixando vídeo...' :
+                                      video.progress < 55 ? 'Transcrevendo áudio...' :
+                                      video.progress < 60 ? 'Analisando momentos virais...' :
+                                      `Processando e renderizando cortes (${videoClips.length} prontos)...`
+                                    ) : (
+                                      'Processando vídeo...'
+                                    )}
+                                  </span>
+                                  <span className="font-mono text-violet-400">{video.progress || 10}%</span>
+                                </div>
+                                <div className="w-full bg-zinc-800 h-2 rounded-full overflow-hidden shadow-inner">
+                                  <div 
+                                    className="bg-gradient-to-r from-violet-500 to-fuchsia-500 h-full transition-all duration-500 rounded-full" 
+                                    style={{ width: `${video.progress || 10}%` }}
+                                  ></div>
+                                </div>
+                              </div>
+
+                              {/* Clips Preview being formed */}
+                              {videoClips.length > 0 && (
+                                <div className="space-y-2.5 pt-2 border-t border-zinc-800/40">
+                                  <h5 className="text-[10px] font-bold text-zinc-500 uppercase tracking-wider">
+                                    Cortes identificados pela IA ({videoClips.length})
+                                  </h5>
+                                  <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
+                                    {videoClips.map((clip) => (
+                                      <div 
+                                        key={clip.id} 
+                                        className="p-3.5 rounded-xl border border-zinc-800/50 bg-zinc-950/40 hover:bg-zinc-950/60 transition-all flex flex-col justify-between space-y-2.5 animate-fadeIn"
+                                      >
+                                        <div>
+                                          <div className="flex justify-between items-center mb-1">
+                                            <span className="px-1.5 py-0.5 text-[8px] font-bold rounded bg-zinc-800 text-zinc-400 uppercase">
+                                              {clip.content_type}
+                                            </span>
+                                            <span className="text-[9px] font-bold text-emerald-400">
+                                              ★ {clip.score}
+                                            </span>
+                                          </div>
+                                          <h6 className="font-bold text-xs text-zinc-300 truncate">{clip.title}</h6>
+                                          <p className="text-[10px] text-zinc-500 line-clamp-1 italic">
+                                            &ldquo;{clip.hook}&rdquo;
+                                          </p>
+                                        </div>
+                                        <div className="text-[9px] text-zinc-650 font-mono flex items-center justify-between">
+                                          <span>{formatDuration(clip.duration)}</span>
+                                          <span className="text-emerald-500 font-semibold flex items-center gap-1">
+                                            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span> Pronto
+                                          </span>
+                                        </div>
+                                      </div>
+                                    ))}
+                                  </div>
+                                </div>
+                              )}
+                            </div>
+                          )}
 
                           {/* Video error if failed */}
                           {video.status === 'failed' && video.error_message && (
