@@ -67,6 +67,7 @@ export default function Dashboard() {
   const [profileSuccessMsg, setProfileSuccessMsg] = useState('');
   const [activeTab, setActiveTab] = useState<'create' | 'videos' | 'calendar' | 'brandkit' | 'integrations' | 'billing'>('create');
   const [playingClip, setPlayingClip] = useState<Clip | null>(null);
+  const [selectedVideoForClips, setSelectedVideoForClips] = useState<Video | null>(null);
   
   // Social and scheduling states
   const [connectedAccounts, setConnectedAccounts] = useState<any[]>([]);
@@ -145,6 +146,25 @@ export default function Dashboard() {
       setConnectedAccounts(prev => prev.filter(acc => acc.provider !== provider));
     } else {
       alert(`Erro ao desconectar: ${error.message}`);
+    }
+  };
+
+  const handleDeleteVideo = async (videoId: string) => {
+    if (!window.confirm('Tem certeza de que deseja excluir este vídeo e todos os seus cortes?')) return;
+    
+    try {
+      const { error } = await supabase
+        .from('videos')
+        .delete()
+        .eq('id', videoId);
+        
+      if (error) throw error;
+      
+      // Update state
+      setVideos(prev => prev.filter(v => v.id !== videoId));
+      setClips(prev => prev.filter(c => c.video_id !== videoId));
+    } catch (err: any) {
+      alert(`Erro ao excluir vídeo: ${err.message}`);
     }
   };
 
@@ -590,162 +610,235 @@ export default function Dashboard() {
         {/* Tab 2: Videos Grid */}
         {activeTab === 'videos' && (
           <div className="space-y-6 animate-fadeIn">
-            {videos.length === 0 ? (
-              <div className="text-center py-20 border border-zinc-800 rounded-2xl bg-zinc-900/10 glass-panel">
-                <svg className="w-12 h-12 text-zinc-600 mx-auto mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 4v16M17 4v16M3 8h4m10 0h4M3 12h18M3 16h4m10 0h4M4 20h16a1 1 0 001-1V5a1 1 0 00-1-1H4a1 1 0 00-1 1v14a1 1 0 001 1z" />
-                </svg>
-                <h3 className="text-lg font-bold text-zinc-400">Nenhum vídeo processado</h3>
-                <p className="text-zinc-600 text-sm mt-1 max-w-sm mx-auto">
-                  Vá na aba <strong>Criar Novo Vídeo</strong> e faça o upload do seu primeiro arquivo longo.
-                </p>
+            {selectedVideoForClips ? (
+              // SUB-MENU / DEDICATED SCREEN FOR CLIPS
+              <div className="space-y-6 animate-fadeIn">
+                <div className="flex items-center justify-between">
+                  <button
+                    onClick={() => setSelectedVideoForClips(null)}
+                    className="inline-flex items-center justify-center px-4 py-2 text-xs font-semibold rounded-lg bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 text-zinc-300 hover:text-white transition-all cursor-pointer"
+                  >
+                    <svg className="w-3.5 h-3.5 mr-1.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
+                    </svg>
+                    Voltar para Meus Vídeos
+                  </button>
+                  <button
+                    onClick={() => {
+                      handleDeleteVideo(selectedVideoForClips.id);
+                      setSelectedVideoForClips(null);
+                    }}
+                    className="inline-flex items-center justify-center px-4 py-2 text-xs font-semibold rounded-lg bg-red-950/20 hover:bg-red-900/40 border border-red-900/30 text-red-400 hover:text-red-300 transition-all cursor-pointer"
+                  >
+                    <svg className="w-3.5 h-3.5 mr-1.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                    </svg>
+                    Excluir Vídeo
+                  </button>
+                </div>
+
+                <div className="rounded-2xl border border-zinc-800 bg-zinc-900/10 glass-panel overflow-hidden shadow-lg">
+                  {/* Video Header bar */}
+                  <div className="p-5 bg-zinc-900/20 border-b border-zinc-800/60 flex flex-wrap items-center justify-between gap-4">
+                    <div>
+                      <h4 className="font-bold text-base text-zinc-100">{selectedVideoForClips.name}</h4>
+                      <p className="text-xs text-zinc-500">
+                        Processado em: {new Date(selectedVideoForClips.created_at).toLocaleString('pt-BR')}
+                        {selectedVideoForClips.duration > 0 && ` • Duração: ${formatDuration(selectedVideoForClips.duration)}`}
+                      </p>
+                    </div>
+                    <div>
+                      <span className="px-3.5 py-1.5 text-xs font-semibold rounded-full border border-emerald-500/20 bg-emerald-500/10 text-emerald-400">
+                        Concluído ({clips.filter((c) => c.video_id === selectedVideoForClips.id).length} cortes)
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Video clips grid list */}
+                  <div className="p-5 space-y-4">
+                    <h5 className="text-xs font-bold text-zinc-500 uppercase tracking-wider">Cortes Recomendados</h5>
+                    {clips.filter((c) => c.video_id === selectedVideoForClips.id).length === 0 ? (
+                      <p className="text-sm text-zinc-500 py-2">Nenhum corte gerado para este vídeo.</p>
+                    ) : (
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        {clips.filter((c) => c.video_id === selectedVideoForClips.id).map((clip) => (
+                          <div key={clip.id} className="rounded-xl border border-zinc-800/60 bg-zinc-950/80 p-4 flex flex-col justify-between hover:border-zinc-700/80 transition-colors">
+                            <div>
+                              <div className="flex justify-between items-start mb-2">
+                                <span className="px-2 py-0.5 text-[10px] font-bold rounded bg-zinc-800 text-zinc-400 uppercase">
+                                  {clip.content_type}
+                                </span>
+                                <span className={`px-2 py-0.5 text-[10px] font-extrabold rounded ${
+                                  clip.score >= 80 ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20' :
+                                  clip.score >= 60 ? 'bg-yellow-500/10 text-yellow-400 border border-yellow-500/20' :
+                                  'bg-zinc-800 text-zinc-400'
+                                }`}>
+                                  Score: {clip.score}
+                                </span>
+                              </div>
+                              <h6 className="font-bold text-sm text-zinc-200 mb-1 leading-snug truncate">
+                                {clip.title}
+                              </h6>
+                              <p className="text-xs text-violet-400 font-medium mb-2 truncate">
+                                Hook: &ldquo;{clip.hook}&rdquo;
+                              </p>
+                              <p className="text-xs text-zinc-500 leading-relaxed mb-3 line-clamp-2">
+                                {clip.reason}
+                              </p>
+                              <div className="text-[11px] text-zinc-600 mb-4 font-mono">
+                                Tempo: {formatDuration(clip.start_time)}s - {formatDuration(clip.end_time)}s ({formatDuration(clip.duration)}s)
+                              </div>
+                            </div>
+
+                            <div className="pt-3 border-t border-zinc-900 space-y-2">
+                              <div className="grid grid-cols-2 gap-2">
+                                <button
+                                  onClick={() => setPlayingClip(clip)}
+                                  className="inline-flex items-center justify-center px-3 py-2 text-xs font-semibold rounded-lg bg-violet-600 hover:bg-violet-500 text-white transition-all cursor-pointer shadow-md shadow-violet-500/10"
+                                >
+                                  Visualizar
+                                </button>
+                                <a
+                                  href={clip.storage_path ? `${r2PublicUrl}/${clip.storage_path}` : '#'}
+                                  target="_blank"
+                                  rel="noreferrer"
+                                  className="inline-flex items-center justify-center px-3 py-2 text-xs font-semibold rounded-lg bg-zinc-800 hover:bg-zinc-700 border border-zinc-700 text-zinc-300 hover:text-white transition-all"
+                                >
+                                  Baixar (MP4)
+                                </a>
+                              </div>
+                              
+                              <button
+                                onClick={() => {
+                                  setSchedulingClip(clip);
+                                  setScheduleTitle(clip.title);
+                                  setScheduleDescription(clip.reason);
+                                  if (connectedAccounts.length > 0) {
+                                    setScheduleProvider(connectedAccounts[0].provider);
+                                  } else {
+                                    setScheduleProvider('youtube');
+                                  }
+                                }}
+                                className="inline-flex w-full items-center justify-center px-3 py-2 text-xs font-semibold rounded-lg bg-zinc-900 hover:bg-zinc-850 border border-zinc-800 text-zinc-400 hover:text-white transition-all cursor-pointer"
+                              >
+                                <svg className="w-3.5 h-3.5 mr-1.5 text-violet-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                                </svg>
+                                Agendar Post
+                              </button>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </div>
               </div>
             ) : (
+              // MAIN LIST OF ALL VIDEOS
               <div className="space-y-6">
-                {videos.map((video) => {
-                  const videoClips = clips.filter((c) => c.video_id === video.id);
-                  return (
-                    <div key={video.id} className="rounded-2xl border border-zinc-800 bg-zinc-900/10 glass-panel overflow-hidden shadow-lg">
-                      
-                      {/* Video Header bar */}
-                      <div className="p-5 bg-zinc-900/20 border-b border-zinc-800/60 flex flex-wrap items-center justify-between gap-4">
-                        <div>
-                          <h4 className="font-bold text-base text-zinc-100">{video.name}</h4>
-                          <p className="text-xs text-zinc-500">
-                            Processado em: {new Date(video.created_at).toLocaleString('pt-BR')}
-                            {video.duration > 0 && ` • Duração: ${formatDuration(video.duration)}`}
-                          </p>
-                        </div>
-                        
-                        <div className="flex items-center space-x-3">
-                          {video.status === 'completed' && (
-                            <button
-                              onClick={() => handleDownloadReport(video, videoClips)}
-                              className="px-3.5 py-2 text-xs font-semibold rounded-lg bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 text-zinc-300 hover:text-white transition-colors flex items-center space-x-2"
-                            >
-                              <svg className="w-3.5 h-3.5 text-violet-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                              </svg>
-                              <span>Exportar Relatório</span>
-                            </button>
-                          )}
-
-                          {video.status === 'pending' && (
-                            <span className="px-3.5 py-1.5 text-xs font-semibold rounded-full border border-yellow-500/20 bg-yellow-500/10 text-yellow-500 flex items-center space-x-1 animate-pulse">
-                              <span>Pendente na fila</span>
-                            </span>
-                          )}
-                          {video.status === 'processing' && (
-                            <span className="px-3.5 py-1.5 text-xs font-semibold rounded-full border border-violet-500/20 bg-violet-500/10 text-violet-400 flex items-center space-x-2">
-                              <span className="w-1.5 h-1.5 rounded-full bg-violet-400 animate-ping"></span>
-                              <span>IA selecionando cortes...</span>
-                            </span>
-                          )}
-                          {video.status === 'completed' && (
-                            <span className="px-3.5 py-1.5 text-xs font-semibold rounded-full border border-emerald-500/20 bg-emerald-500/10 text-emerald-400">
-                              Concluído ({videoClips.length} cortes)
-                            </span>
-                          )}
-                          {video.status === 'failed' && (
-                            <span className="px-3.5 py-1.5 text-xs font-semibold rounded-full border border-red-500/20 bg-red-500/10 text-red-400" title={video.error_message || ''}>
-                              Erro
-                            </span>
-                          )}
-                        </div>
-                      </div>
-
-                      {/* Video error if failed */}
-                      {video.status === 'failed' && video.error_message && (
-                        <div className="p-5 border-b border-zinc-800/60 bg-red-500/5 text-sm text-red-400/80">
-                          <strong>Erro:</strong> {video.error_message}
-                        </div>
-                      )}
-
-                      {/* Video clips grid lists */}
-                      {video.status === 'completed' && (
-                        <div className="p-5 space-y-4">
-                          <h5 className="text-xs font-bold text-zinc-500 uppercase tracking-wider">Cortes Recomendados</h5>
+                {videos.length === 0 ? (
+                  <div className="text-center py-20 border border-zinc-800 rounded-2xl bg-zinc-900/10 glass-panel">
+                    <svg className="w-12 h-12 text-zinc-600 mx-auto mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 4v16M17 4v16M3 8h4m10 0h4M3 12h18M3 16h4m10 0h4M4 20h16a1 1 0 001-1V5a1 1 0 00-1-1H4a1 1 0 00-1 1v14a1 1 0 001 1z" />
+                    </svg>
+                    <h3 className="text-lg font-bold text-zinc-400">Nenhum vídeo processado</h3>
+                    <p className="text-zinc-600 text-sm mt-1 max-w-sm mx-auto">
+                      Vá na aba <strong>Criar Novo Vídeo</strong> e faça o upload do seu primeiro arquivo longo.
+                    </p>
+                  </div>
+                ) : (
+                  <div className="space-y-6">
+                    {videos.map((video) => {
+                      const videoClips = clips.filter((c) => c.video_id === video.id);
+                      return (
+                        <div key={video.id} className="rounded-2xl border border-zinc-800 bg-zinc-900/10 glass-panel overflow-hidden shadow-lg">
                           
-                          {videoClips.length === 0 ? (
-                            <p className="text-sm text-zinc-500 py-2">Nenhum corte gerado para este vídeo.</p>
-                          ) : (
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                              {videoClips.map((clip) => (
-                                <div key={clip.id} className="rounded-xl border border-zinc-800/60 bg-zinc-950/80 p-4 flex flex-col justify-between hover:border-zinc-700/80 transition-colors">
-                                  <div>
-                                    <div className="flex justify-between items-start mb-2">
-                                      <span className="px-2 py-0.5 text-[10px] font-bold rounded bg-zinc-800 text-zinc-400 uppercase">
-                                        {clip.content_type}
-                                      </span>
-                                      <span className={`px-2 py-0.5 text-[10px] font-extrabold rounded ${
-                                        clip.score >= 80 ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20' :
-                                        clip.score >= 60 ? 'bg-yellow-500/10 text-yellow-400 border border-yellow-500/20' :
-                                        'bg-zinc-800 text-zinc-400'
-                                      }`}>
-                                        Score: {clip.score}
-                                      </span>
-                                    </div>
-                                    <h6 className="font-bold text-sm text-zinc-200 mb-1 leading-snug truncate">
-                                      {clip.title}
-                                    </h6>
-                                    <p className="text-xs text-violet-400 font-medium mb-2 truncate">
-                                      Hook: &ldquo;{clip.hook}&rdquo;
-                                    </p>
-                                    <p className="text-xs text-zinc-500 leading-relaxed mb-3 line-clamp-2">
-                                      {clip.reason}
-                                    </p>
-                                    <div className="text-[11px] text-zinc-600 mb-4 font-mono">
-                                      Tempo: {formatDuration(clip.start_time)}s - {formatDuration(clip.end_time)}s ({formatDuration(clip.duration)}s)
-                                    </div>
-                                  </div>
+                          {/* Video Header bar */}
+                          <div className="p-5 bg-zinc-900/20 flex flex-wrap items-center justify-between gap-4">
+                            <div>
+                              <h4 className="font-bold text-base text-zinc-100">{video.name}</h4>
+                              <p className="text-xs text-zinc-500">
+                                Processado em: {new Date(video.created_at).toLocaleString('pt-BR')}
+                                {video.duration > 0 && ` • Duração: ${formatDuration(video.duration)}`}
+                              </p>
+                            </div>
+                            
+                            <div className="flex items-center space-x-3">
+                              {video.status === 'completed' && (
+                                <>
+                                  <button
+                                    onClick={() => setSelectedVideoForClips(video)}
+                                    className="px-3.5 py-2 text-xs font-semibold rounded-lg bg-violet-600 hover:bg-violet-500 text-white transition-colors flex items-center space-x-2 cursor-pointer shadow-md shadow-violet-500/10"
+                                  >
+                                    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                                    </svg>
+                                    <span>Ver Cortes</span>
+                                  </button>
+                                  
+                                  <button
+                                    onClick={() => handleDownloadReport(video, videoClips)}
+                                    className="px-3.5 py-2 text-xs font-semibold rounded-lg bg-zinc-900 hover:bg-zinc-850 border border-zinc-800 text-zinc-300 hover:text-white transition-colors flex items-center space-x-2 cursor-pointer"
+                                  >
+                                    <svg className="w-3.5 h-3.5 text-violet-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                                    </svg>
+                                    <span>Relatório</span>
+                                  </button>
+                                </>
+                              )}
 
-                                  <div className="pt-3 border-t border-zinc-900 space-y-2">
-                                    <div className="grid grid-cols-2 gap-2">
-                                      <button
-                                        onClick={() => setPlayingClip(clip)}
-                                        className="inline-flex items-center justify-center px-3 py-2 text-xs font-semibold rounded-lg bg-violet-600 hover:bg-violet-500 text-white transition-all cursor-pointer shadow-md shadow-violet-500/10"
-                                      >
-                                        Visualizar
-                                      </button>
-                                      <a
-                                        href={clip.storage_path ? `${r2PublicUrl}/${clip.storage_path}` : '#'}
-                                        target="_blank"
-                                        rel="noreferrer"
-                                        className="inline-flex items-center justify-center px-3 py-2 text-xs font-semibold rounded-lg bg-zinc-800 hover:bg-zinc-700 border border-zinc-700 text-zinc-300 hover:text-white transition-all"
-                                      >
-                                        Baixar (MP4)
-                                      </a>
-                                    </div>
-                                    
-                                    <button
-                                      onClick={() => {
-                                        setSchedulingClip(clip);
-                                        setScheduleTitle(clip.title);
-                                        setScheduleDescription(clip.reason);
-                                        if (connectedAccounts.length > 0) {
-                                          setScheduleProvider(connectedAccounts[0].provider);
-                                        } else {
-                                          setScheduleProvider('youtube');
-                                        }
-                                      }}
-                                      className="inline-flex w-full items-center justify-center px-3 py-2 text-xs font-semibold rounded-lg bg-zinc-900 hover:bg-zinc-850 border border-zinc-800 text-zinc-400 hover:text-white transition-all cursor-pointer"
-                                    >
-                                      <svg className="w-3.5 h-3.5 mr-1.5 text-violet-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                                      </svg>
-                                      Agendar Post
-                                    </button>
-                                  </div>
-                                </div>
-                              ))}
+                              {video.status === 'pending' && (
+                                <span className="px-3.5 py-1.5 text-xs font-semibold rounded-full border border-yellow-500/20 bg-yellow-500/10 text-yellow-500 flex items-center space-x-1 animate-pulse">
+                                  <span>Pendente na fila</span>
+                                </span>
+                              )}
+                              {video.status === 'processing' && (
+                                <span className="px-3.5 py-1.5 text-xs font-semibold rounded-full border border-violet-500/20 bg-violet-500/10 text-violet-400 flex items-center space-x-2">
+                                  <span className="w-1.5 h-1.5 rounded-full bg-violet-400 animate-ping"></span>
+                                  <span>IA selecionando cortes...</span>
+                                </span>
+                              )}
+                              {video.status === 'completed' && (
+                                <span className="px-3.5 py-1.5 text-xs font-semibold rounded-full border border-emerald-500/20 bg-emerald-500/10 text-emerald-400">
+                                  Concluído ({videoClips.length} cortes)
+                                </span>
+                              )}
+                              {video.status === 'failed' && (
+                                <span className="px-3.5 py-1.5 text-xs font-semibold rounded-full border border-red-500/20 bg-red-500/10 text-red-400" title={video.error_message || ''}>
+                                  Erro
+                                </span>
+                              )}
+
+                              {(video.status === 'completed' || video.status === 'failed') && (
+                                <button
+                                  onClick={() => handleDeleteVideo(video.id)}
+                                  className="px-3.5 py-2 text-xs font-semibold rounded-lg bg-red-950/20 hover:bg-red-900/40 border border-red-900/30 text-red-400 hover:text-red-300 transition-colors flex items-center space-x-2 cursor-pointer"
+                                  title="Excluir vídeo"
+                                >
+                                  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                                  </svg>
+                                  <span>Excluir</span>
+                                </button>
+                              )}
+                            </div>
+                          </div>
+
+                          {/* Video error if failed */}
+                          {video.status === 'failed' && video.error_message && (
+                            <div className="p-5 border-t border-zinc-800/60 bg-red-500/5 text-sm text-red-400/80">
+                              <strong>Erro:</strong> {video.error_message}
                             </div>
                           )}
+                          
                         </div>
-                      )}
-                      
-                    </div>
-                  );
-                })}
+                      );
+                    })}
+                  </div>
+                )}
               </div>
             )}
           </div>
